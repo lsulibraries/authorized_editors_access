@@ -1,0 +1,8 @@
+name: Authorized Editors Access
+type: module
+description: Grants per-node edit access to users listed in field_authorized_editors.
+core_version_requirement: ^11
+package: Custom
+dependencies:
+  - drupal:node
+  - drupal:user

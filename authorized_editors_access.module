@@ -1,0 +1,61 @@
+<?php
+
+declare(strict_types=1);
+
+use Drupal\Core\Access\AccessResult;
+use Drupal\Core\Session\AccountInterface;
+use Drupal\node\NodeInterface;
+
+/**
+ * Node access callback.
+ *
+ * Implements hook_node_access() via node-type-specific hook.
+ *
+ * @param \Drupal\node\NodeInterface $node
+ *   The node being accessed.
+ * @param string $op
+ *   The operation being checked: 'view', 'update', 'delete'.
+ * @param \Drupal\Core\Session\AccountInterface $account
+ *   The user account.
+ *
+ * @return \Drupal\Core\Access\AccessResultInterface
+ *   The access result.
+ */
+function authorized_editors_access_node_access(NodeInterface $node, $op, AccountInterface $account) {
+  // Only alter UPDATE access. Leave view/delete to core and other modules.
+  if ($op !== 'update') {
+    return AccessResult::neutral();
+  }
+
+  // Admins or roles with global edit permissions should stay in control.
+  // Let core/other modules handle them; we remain neutral.
+  if ($account->hasPermission('administer nodes') || $account->hasPermission('bypass node access')) {
+    return AccessResult::neutral();
+  }
+
+  // If the node doesn't have the field, do nothing.
+  if (!$node->hasField('field_authorized_editors')) {
+    return AccessResult::neutral();
+  }
+
+  // If the field is empty, do nothing.
+  $target_ids = $node->get('field_authorized_editors')->getValue();
+  if (empty($target_ids)) {
+    return AccessResult::neutral();
+  }
+
+  $authorized_uids = array_map(static function (array $item): int {
+    return (int) $item['target_id'];
+  }, $target_ids);
+
+  // If current user is listed as an authorized editor, allow update.
+  if (in_array((int) $account->id(), $authorized_uids, true)) {
+    // Allow update; cache per user and node.
+    return AccessResult::allowed()
+      ->cachePerUser()
+      ->addCacheableDependency($node);
+  }
+
+  // Otherwise, stay neutral so we don't accidentally deny access.
+  return AccessResult::neutral();
+}
